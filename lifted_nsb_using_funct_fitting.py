@@ -191,7 +191,7 @@ v_batches = torch.split(v[:num_batches * batch_size], batch_size)
 fpv_batches = torch.split(fpv[:num_batches * batch_size], batch_size)
 
 # Training loop
-num_epochs = 2000
+num_epochs = 20000
 for epoch in range(num_epochs):
     total_loss = 0.0
     for batch in range(num_batches):
