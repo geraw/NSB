@@ -6,6 +6,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+import time
+start_time = time.time()
+
 n = 3  # Number of robots
 m = 5  # Number of lookahead time steps
 DELTA = 1  # Sampling interval
@@ -188,7 +191,7 @@ v_batches = torch.split(v[:num_batches * batch_size], batch_size)
 fpv_batches = torch.split(fpv[:num_batches * batch_size], batch_size)
 
 # Training loop
-num_epochs = 20000
+num_epochs = 2000
 for epoch in range(num_epochs):
     total_loss = 0.0
     for batch in range(num_batches):
@@ -239,3 +242,13 @@ for _ in range(100):
         for row in rows:
             print('\t'.join([f'{x:.4f}' for x in row]))
 
+print("\n\n\n-------------------\n\n\n")
+print(f"Parameters: n={n} m={m} l={l} objective={objective}" )
+print(f"num_samples={num_samples}\nnum_epochs={num_epochs}\nbatch_size={batch_size}\nnum_batches={num_batches} ")
+print(f"Loss: {avg_loss}")
+
+elapsed_time = time.time() - start_time
+hours = int(elapsed_time // 3600)
+minutes = int((elapsed_time % 3600) // 60)
+seconds = int(elapsed_time % 60)
+print(f"Time: {hours}h {minutes}m {seconds}s")
