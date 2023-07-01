@@ -7,12 +7,13 @@ import torch.nn as nn
 import torch.optim as optim
 
 import time
+
 start_time = time.time()
 
 n = 3  # Number of robots
 m = 5  # Number of lookahead time steps
 DELTA = 1  # Sampling interval
-objective = "Formation" # Baricenter or Formation or Obstacles
+objective = "Formation"  # Baricenter or Formation or Obstacles
 
 """# Process Dynamics
 
@@ -20,9 +21,11 @@ objective = "Formation" # Baricenter or Formation or Obstacles
 We define the update function $up\colon \mathbb{R}^{n \times 2} \times  \mathbb{R}^{m \times n \times 2} \to \mathbb{R}^{n \times 2}$ by: $$up(r,v)=r+\Delta \sum_{i=0}^m v_i$$
 """
 
+
 # Define the position update function
 def up(robots, speed_vectors):
     return robots + DELTA * sum(speed_vectors)
+
 
 # Test the function
 robots = np.array([[1, 1], [2, 2], [3, 3]])
@@ -35,6 +38,7 @@ assert np.allclose(up(robots, speed_vectors), robots)
 """##
 Define the barycenter objective function $f\colon \mathbb{R}^{n \times 2} \to \mathbb{R}^{l}$, where $l=2$ as: $$f(r) := \frac{1}{n}\sum_{i=1}^{n} r_i$$
 """
+
 
 ################# Define the barycenter objective function
 def barycenter(robots):
@@ -61,6 +65,7 @@ def formation(robots):
 
     return np.array(mapped_points).flatten()
 
+
 # Test that the formation function is correct
 points = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])
 form = formation(points)
@@ -74,6 +79,7 @@ obstacles_pos = [(1, 1), (2, 3), (0, 0), (0, 2)]
 
 # Threshold distance to obstacles
 threshold = 0.2
+
 
 # This function returns the distance to the closest obstacle for each robot
 def obstacles(robots):
@@ -92,13 +98,14 @@ def obstacles(robots):
     # Replace all float("inf") in distances with zero
     return np.where(distances == float("inf"), 0, distances).sum()
 
+
 # Test that the compute_accumulated_distances function is correct
 robots = np.array([[0.01, 0.02], [0.03, 0.04], [0.05, 0.06], [1.97, 2.98]])
 assert np.allclose(obstacles(robots), 0.186518)
 
 
 objectives = {"Baricenter": barycenter, "Formation": formation, "Obstacles": obstacles}
-ls = {"Baricenter": 2, "Formation": 2*(n-1), "Obstacles": 1}
+ls = {"Baricenter": 2, "Formation": 2 * (n - 1), "Obstacles": 1}
 
 # This is our only objective function for the time being
 f = objectives[objective]
@@ -109,8 +116,10 @@ The function that we are going to fit is $\delta\colon \mathbb{R}^{n \times 2} \
 $$\delta(r,v) := f(up(r,v)) - f(r)$$
 """
 
+
 def delta(r, v):
     return tuple(f(up(r, v)) - f(r))
+
 
 # Test that the delta function is correct
 r = np.array([[1, 2], [3, 4], [5, 6], [7, 8]])
@@ -122,7 +131,9 @@ elif objective == "Formation":
     expected_result = np.array([[1, 1, 2, 2, 3, 3]])
 
 result = delta(r, v)
-assert np.allclose(result, expected_result), f"Unexpected result: {result}, expected: {expected_result}"
+assert np.allclose(
+    result, expected_result
+), f"Unexpected result: {result}, expected: {expected_result}"
 
 """# Model Fitting using PyTorch
 
@@ -132,32 +143,45 @@ assert np.allclose(result, expected_result), f"Unexpected result: {result}, expe
 num_samples = 5000
 
 # Generate p and v
-p = torch.randn(num_samples, 2*n)
-v = torch.randn(num_samples, 2*n*m)
+p = torch.randn(num_samples, 2 * n)
+v = torch.randn(num_samples, 2 * n * m)
 
 # Example of input to delta
 pp = p.reshape(-1, n, 2)
 vv = v.reshape(-1, m, n, 2)
 
 # Calculate delta for each sample and convert to PyTorch tensors
-fpv = torch.stack([torch.tensor(delta(pp[i], vv[i]), dtype=torch.float32) for i in range(num_samples)])
+fpv = torch.stack(
+    [torch.tensor(delta(pp[i], vv[i]), dtype=torch.float32) for i in range(num_samples)]
+)
 
 assert fpv[1].shape == (l,), "Unexpected shape of fpv"
 
-batch_size = 100  # Batch size for training
+batch_size = 200  # Batch size for training
 
-assert batch_size <= num_samples, "Batch size must be less than or equal to the number of samples"
+assert (
+    batch_size <= num_samples
+), "Batch size must be less than or equal to the number of samples"
+
 
 # Define the architecture of the neural network
 class FunctionApproximator(nn.Module):
     def __init__(self):
         super(FunctionApproximator, self).__init__()
-        self.create_mat = nn.Sequential(
-            nn.Linear(2*n, 2*n),
-            nn.ReLU(),
-            nn.Linear(2*n, l * m * n * 2),
-            nn.ReLU(),
-        )
+
+        # Define the sizes of the layers of the network
+        LAYERS = 8
+        layer_sizes = [2 * n] * LAYERS + [l * m * n * 2] * (LAYERS + 1)
+
+        # Create the layers: linear + ReLU.
+        layers = []
+        for i in range(len(layer_sizes) - 1):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
+            layers.append(nn.ReLU())
+
+        self.create_mat = nn.Sequential(*layers)
+
+        # Initialize the weights and biases
         for module in self.create_mat.modules():
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
@@ -174,6 +198,7 @@ class FunctionApproximator(nn.Module):
 
         return output
 
+
 model = FunctionApproximator()
 
 # Define the loss function
@@ -186,12 +211,12 @@ optimizer = optim.SGD(model.parameters(), lr=0.01)
 num_batches = num_samples // batch_size
 print(f"{num_samples} samples")
 print(f"{num_batches} batches")
-p_batches = torch.split(p[:num_batches * batch_size], batch_size)
-v_batches = torch.split(v[:num_batches * batch_size], batch_size)
-fpv_batches = torch.split(fpv[:num_batches * batch_size], batch_size)
+p_batches = torch.split(p[: num_batches * batch_size], batch_size)
+v_batches = torch.split(v[: num_batches * batch_size], batch_size)
+fpv_batches = torch.split(fpv[: num_batches * batch_size], batch_size)
 
 # Training loop
-num_epochs = 20000
+num_epochs = 400000
 for epoch in range(num_epochs):
     total_loss = 0.0
     for batch in range(num_batches):
@@ -216,8 +241,8 @@ for _ in range(100):
     # Evaluation
     with torch.no_grad():
         # Generate test data
-        test_p = torch.randn(1, 2*n)
-        test_v = torch.randn(1, m*n*2)
+        test_p = torch.randn(1, 2 * n)
+        test_v = torch.randn(1, m * n * 2)
 
         # Apply the trained model to compute J(p)v
         Jpv = model(test_p, test_v)
@@ -231,8 +256,6 @@ for _ in range(100):
         vv = test_v.reshape(-1, m, n, 2).numpy()
         print(delta(pp[0], vv[0]))
 
-
-
         # Extract the internal matrix produced for specific p
         print("\nThe matrix J(p):")
         mat = model.matrix
@@ -240,11 +263,13 @@ for _ in range(100):
         # Print the tensor in a matrix format
         rows = mat.squeeze().tolist()
         for row in rows:
-            print('\t'.join([f'{x:.4f}' for x in row]))
+            print("\t".join([f"{x:.4f}" for x in row]))
 
 print("\n\n\n-------------------\n\n\n")
-print(f"Parameters: n={n} m={m} l={l} objective={objective}" )
-print(f"num_samples={num_samples}\nnum_epochs={num_epochs}\nbatch_size={batch_size}\nnum_batches={num_batches} ")
+print(f"Parameters: n={n} m={m} l={l} objective={objective}")
+print(
+    f"num_samples={num_samples}\nnum_epochs={num_epochs}\nbatch_size={batch_size}\nnum_batches={num_batches} "
+)
 print(f"Loss: {avg_loss}")
 
 elapsed_time = time.time() - start_time
